@@ -95,38 +95,53 @@ class PathPlanningEnv(gym.Env):
 
     
     def step(self, action):
+        done = False
+        old_distance = self.distances[self.cur_row, self.cur_col]
         if action=='u' or action==0:
             if self.cur_row > 0:
                 self.grid[0, self.cur_row, self.cur_col] = 0
                 self.cur_row -= 1
                 self.grid[0, self.cur_row, self.cur_col] = 1
+            else:
+                done = True
         elif action=='d' or action==1:
             if self.cur_row < self.height - 1:
                 self.grid[0, self.cur_row, self.cur_col] = 0
                 self.cur_row += 1
                 self.grid[0, self.cur_row, self.cur_col] = 1
+            else:
+                done = True
         elif action=='l' or action==2:
             if self.cur_col > 0:
                 self.grid[0, self.cur_row, self.cur_col] = 0
                 self.cur_col -= 1
                 self.grid[0, self.cur_row, self.cur_col] = 1
+            else:
+                done = True
         elif action=='r' or action==3:
             if self.cur_col < self.width - 1:
                 self.grid[0, self.cur_row, self.cur_col] = 0
                 self.cur_col += 1
                 self.grid[0, self.cur_row, self.cur_col] = 1
+            else:
+                done = True
         else:
             print("ERROR: unknown move")
             return
+
+        if (self.cur_row == self.goal[0] and self.cur_col == self.goal[1]):
+            done = True
         
+        new_distance = self.distances[self.cur_row, self.cur_col]
         
         observation = self.grid
         
-        reward = 0
-        
-        done = False
+        reward = old_distance - new_distance
+        if (self.grid[2, self.cur_row, self.cur_col] == 1):
+            reward = -10
         
         info = ""
+
         return observation, reward, done, info
 
 
@@ -137,6 +152,11 @@ def main():
     env.display()
     env.ComputeAllDistance()
     print(env.distances)
+    for _ in range(10):
+        _, reward, done, _ = env.step('r')
+        env.display()
+        print("reward: {}, done: {}\n".format(reward, done))
+        
 
 if __name__ == "__main__":
     main()
