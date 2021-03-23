@@ -9,6 +9,12 @@ class AStar:
         grid: an 2D array representing the map. 1 represents obstacles, 0 free block.
         goal: a tuple (x, y) denoting the coordinate of the goal.
         allow_diagonal: whether diagonal movement is allowed. Diagonal movements have cost 1.
+        
+        Grid layout:
+        # y = 0, 1, 2, 3, 4
+            [[0, 0, 0, 0, 0], # x = 0
+             [0, 0, 0, 0, 0], # x = 1
+             [0, 0, 0, 0, 0]] # x = 2
         '''
         self.grid = grid
         self.height = len(grid)
@@ -63,7 +69,7 @@ class AStar:
                     h = self.heauristic_func(x, y - 1)
                     cost = distance + h
                     heapq.heappush(heap, (cost, push_count, (x, y - 1), distance, (x, y)))
-                if x <= self.width - 2 and self.grid[x + 1][y] == 0:
+                if x <= self.height - 2 and self.grid[x + 1][y] == 0:
                     push_count += 1
                     h = self.heauristic_func(x + 1, y)
                     cost = distance + h
@@ -80,17 +86,17 @@ class AStar:
                         h = self.heauristic_func(x - 1, y - 1)
                         cost = distance + h
                         heapq.heappush(heap, (cost, push_count, (x - 1, y - 1), distance, (x, y)))
-                    if x >= 1 and y <= self.height - 2 and self.grid[x - 1][y + 1] == 0:
+                    if x >= 1 and y <= self.width - 2 and self.grid[x - 1][y + 1] == 0:
                         push_count += 1
                         h = self.heauristic_func(x - 1, y + 1)
                         cost = distance + h
                         heapq.heappush(heap, (cost, push_count, (x - 1, y + 1), distance, (x, y)))
-                    if x <= self.width - 2 and y >= 1 and self.grid[x + 1][y - 1] == 0:
+                    if x <= self.height - 2 and y >= 1 and self.grid[x + 1][y - 1] == 0:
                         push_count += 1
                         h = self.heauristic_func(x + 1, y - 1)
                         cost = distance + h
                         heapq.heappush(heap, (cost, push_count, (x + 1, y - 1), distance, (x, y)))
-                    if x <= self.width - 2 and y <= self.height - 2 and self.grid[x + 1][y + 1] == 0:
+                    if x <= self.height - 2 and y <= self.width - 2 and self.grid[x + 1][y + 1] == 0:
                         push_count += 1
                         h = self.heauristic_func(x + 1, y + 1)
                         cost = distance + h
