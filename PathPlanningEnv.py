@@ -32,7 +32,7 @@ class PathPlanningEnv(gym.Env):
         self.grid_initial = np.empty(shape=(3, height, width))
         self.grid_initial.fill(0)
         # randomly select part of grid points as obstacles, and 1 point as source, 1 as target
-        random.seed(100)
+        random.seed(random_seed)
         random_selections = random.sample(range(total_size), k=min(obs_count+2, total_size))
         
         source = random_selections.pop()
@@ -50,6 +50,24 @@ class PathPlanningEnv(gym.Env):
             self.grid_initial[2,row,col] = 1
             
         self.reset()
+
+    def init_from_grid(self, obs_grid, p_init_row, p_init_col, goal_row, goal_col):
+        self.height = obs_grid.shape[0]
+        self.width = obs_grid.shape[1]
+        self.grid_initial = np.empty(shape=(3, self.height, self.width))
+        self.grid_initial.fill(0)
+        for i in range(self.height):
+            for j in range(self.width):
+                self.grid_initial[2,i,j] = obs_grid[i,j]
+
+        self.init_row, self.init_col = p_init_row, p_init_col
+        self.grid_initial[0, self.init_row, self.init_col] = 1
+
+        self.goal = (goal_row, goal_col)
+        self.grid_initial[1, self.goal[0], self.goal[1]] = 1
+
+        self.reset()
+
         
     def reset(self):
         if self.grid_initial.shape[0] == 0:
@@ -78,19 +96,19 @@ class PathPlanningEnv(gym.Env):
                     displ_board[i,j] = 'O'
         print(displ_board)
     
-    def ComputeAllDistance(self):
+    def ComputeAllDistance(self, silent=True):
         if self.grid_initial.shape[0] == 0: return
         planner = AStar(self.grid_initial[2,:,:], self.goal, False)
-        print(self.grid_initial[2,:,:])
+        if not silent: print(self.grid_initial[2,:,:])
         self.distances = np.empty(shape=(self.height, self.width))
         for i in range(self.height):
             for j in range(self.width):
-                print("Evaluate distance from ({}, {}) to ({}, {})".format(i, j, self.goal[0], self.goal[1]))
-                distance = 100000
+                if not silent: print("Evaluate distance from ({}, {}) to ({}, {})".format(i, j, self.goal[0], self.goal[1]))
+                distance = 100
                 if (self.grid_initial[2, i, j] == 0):
                     path = planner.plan(i, j)
                     distance = len(path)
-                print("  Distance {}".format(distance))
+                if not silent: print("  Distance {}".format(distance))
                 self.distances[i,j] = distance
 
     
@@ -104,6 +122,7 @@ class PathPlanningEnv(gym.Env):
                 self.grid[0, self.cur_row, self.cur_col] = 1
             else:
                 done = True
+                old_distance -= 10
         elif action=='d' or action==1:
             if self.cur_row < self.height - 1:
                 self.grid[0, self.cur_row, self.cur_col] = 0
@@ -111,6 +130,7 @@ class PathPlanningEnv(gym.Env):
                 self.grid[0, self.cur_row, self.cur_col] = 1
             else:
                 done = True
+                old_distance -= 10
         elif action=='l' or action==2:
             if self.cur_col > 0:
                 self.grid[0, self.cur_row, self.cur_col] = 0
@@ -118,6 +138,7 @@ class PathPlanningEnv(gym.Env):
                 self.grid[0, self.cur_row, self.cur_col] = 1
             else:
                 done = True
+                old_distance -= 10
         elif action=='r' or action==3:
             if self.cur_col < self.width - 1:
                 self.grid[0, self.cur_row, self.cur_col] = 0
@@ -125,22 +146,27 @@ class PathPlanningEnv(gym.Env):
                 self.grid[0, self.cur_row, self.cur_col] = 1
             else:
                 done = True
+                old_distance -= 10
         else:
             print("ERROR: unknown move")
             return
 
-        if (self.cur_row == self.goal[0] and self.cur_col == self.goal[1]):
+        if (self.cur_row == self.goal[0] and self.cur_col == self.goal[1]): # reach the target
             done = True
+
         
         new_distance = self.distances[self.cur_row, self.cur_col]
         
         observation = self.grid
         
         reward = old_distance - new_distance
-        if (self.grid[2, self.cur_row, self.cur_col] == 1):
+        if (self.grid[2, self.cur_row, self.cur_col] == 1): # reach an obstacle
             reward = -10
+            done = True
         
         info = ""
+
+        if reward < 0: reward = 0
 
         return observation, reward, done, info
 
