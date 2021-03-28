@@ -22,9 +22,9 @@ class PathPlanningEnv(gym.Env):
     def init_random_grid(self, height: int, width: int, obs_count: int, random_seed: int):
         # check total number of grid points
         total_size = height*width
-        if (total_size < 2):
-            print("Error: expect height * width >= 2")
-            return
+
+        assert total_size >= 2, 'Error: expect height * width >= 2'
+        
         
         # initialize the grid
         self.height = height
@@ -70,20 +70,17 @@ class PathPlanningEnv(gym.Env):
 
         
     def reset(self):
-        if self.grid_initial.shape[0] == 0:
-            print("Error: expect an initial grid")
-            return
-        if self.init_row == None or self.init_col == None:
-            print("Error: expect a initial position")
-            return
+        assert self.grid_initial.shape[0] != 0, 'Error: expect an initial grid'
+        assert self.init_row is not None and self.init_col is not None, 'Error: expect a initial position'
+
         self.grid = np.copy(self.grid_initial)
         self.cur_row, self.cur_col = self.init_row, self.init_col
     
     def display(self, grid=None):
         if grid is None:
             grid = self.grid
-        if grid.shape[0] == 0:
-            return
+        assert grid.shape[0] != 0, 'Error: expect a non-empty grid'
+
         displ_board = np.zeros((self.height, self.width), dtype='<U2')
         displ_board.fill(' ')
         for i in range(self.height):
@@ -97,7 +94,8 @@ class PathPlanningEnv(gym.Env):
         print(displ_board)
     
     def ComputeAllDistance(self, silent=True):
-        if self.grid_initial.shape[0] == 0: return
+        assert self.grid_initial.shape[0] != 0, 'Error: expect a non-empty grid'
+
         planner = AStar(self.grid_initial[2,:,:], self.goal, False)
         if not silent: print(self.grid_initial[2,:,:])
         self.distances = np.empty(shape=(self.height, self.width))
@@ -112,61 +110,44 @@ class PathPlanningEnv(gym.Env):
                 self.distances[i,j] = distance
 
     
-    def step(self, action):
+    def step(self, action, early_stop=True):
         done = False
         old_distance = self.distances[self.cur_row, self.cur_col]
+        new_row = self.cur_row
+        new_col = self.cur_col
         if action=='u' or action==0:
-            if self.cur_row > 0:
-                self.grid[0, self.cur_row, self.cur_col] = 0
-                self.cur_row -= 1
-                self.grid[0, self.cur_row, self.cur_col] = 1
-            else:
-                done = True
-                old_distance -= 10
+            new_row -= 1
         elif action=='d' or action==1:
-            if self.cur_row < self.height - 1:
-                self.grid[0, self.cur_row, self.cur_col] = 0
-                self.cur_row += 1
-                self.grid[0, self.cur_row, self.cur_col] = 1
-            else:
-                done = True
-                old_distance -= 10
+            new_row += 1
         elif action=='l' or action==2:
-            if self.cur_col > 0:
-                self.grid[0, self.cur_row, self.cur_col] = 0
-                self.cur_col -= 1
-                self.grid[0, self.cur_row, self.cur_col] = 1
-            else:
-                done = True
-                old_distance -= 10
+            new_col -= 1
         elif action=='r' or action==3:
-            if self.cur_col < self.width - 1:
-                self.grid[0, self.cur_row, self.cur_col] = 0
-                self.cur_col += 1
-                self.grid[0, self.cur_row, self.cur_col] = 1
-            else:
-                done = True
-                old_distance -= 10
+            new_col += 1
         else:
-            print("ERROR: unknown move")
-            return
+            raise RuntimeError("Error: unknown move")
 
-        if (self.cur_row == self.goal[0] and self.cur_col == self.goal[1]): # reach the target
+        if not 0 <= new_row < self.height or not 0 <= new_col < self.width:
+            reward = -10
+            done = early_stop
+        elif self.grid[2, new_row, new_col] == 1:
+            reward = -10
+            done = early_stop
+        else:
+            new_distance = self.distances[new_row, new_col]
+            reward = old_distance - new_distance
+            
+            self.grid[0, self.cur_row, self.cur_col] = 0
+            self.grid[0, new_row, new_col] = 1
+
+            self.cur_row = new_row
+            self.cur_col = new_col
+
+        if (new_row == self.goal[0] and new_col == self.goal[1]): # reach the target
             done = True
-
-        
-        new_distance = self.distances[self.cur_row, self.cur_col]
         
         observation = self.grid
         
-        reward = old_distance - new_distance
-        if (self.grid[2, self.cur_row, self.cur_col] == 1): # reach an obstacle
-            reward = -10
-            done = True
-        
         info = ""
-
-        if reward < 0: reward = 0
 
         return observation, reward, done, info
 
