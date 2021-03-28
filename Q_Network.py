@@ -43,13 +43,13 @@ class Q_Network(nn.Module):
         # flatten layer
                 
         # Number of Linear input connections depends on output of conv2d layers
-        def conv2d_size_out(size, kernel_size = 3, stride = 1):
-            return (size - kernel_size + 1) 
-        conv_width = conv2d_size_out(conv2d_size_out(self.input_MapWidth))
-        conv_height = conv2d_size_out(conv2d_size_out(self.input_MapHeight))
+        def conv2d_size_out(size, kernel_size=3, stride=1):
+            return (size - kernel_size) // stride + 1
+        conv_width = conv2d_size_out(conv2d_size_out(self.input_MapWidth, kernel_size=Conv1Kernel), kernel_size=Conv2Kernel)
+        conv_height = conv2d_size_out(conv2d_size_out(self.input_MapHeight, kernel_size=Conv1Kernel), kernel_size=Conv2Kernel)
         
         # dense layer
-        self.linear_input_dim = conv_width * conv_height * self.bn2_FeaturesNum * self.input_BatchSize
+        self.linear_input_dim = conv_width * conv_height * self.bn2_FeaturesNum
 
         self.n_hidden_1 = HiddenSize
         self.n_hidden_2 = HiddenSize
@@ -72,7 +72,7 @@ class Q_Network(nn.Module):
         self.nonlin4 = nn.ReLU()
         
         self.linear_layer3 = nn.Linear(self.n_hidden_2, self.n_hidden_out)
-        self.nonlin5 = nn.ReLU()
+        self.nonlin5 = lambda x: x
         
 
     def forward(self, x1, x2): # x1: maps, x2: action
