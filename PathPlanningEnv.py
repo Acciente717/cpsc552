@@ -110,7 +110,7 @@ class PathPlanningEnv(gym.Env):
                 self.distances[i,j] = distance
 
     
-    def step(self, action, early_stop=True):
+    def step(self, action, early_stop=True, q_learning = False):
         done = False
         old_distance = self.distances[self.cur_row, self.cur_col]
         new_row = self.cur_row
@@ -148,6 +148,15 @@ class PathPlanningEnv(gym.Env):
         observation = self.grid
         
         info = ""
+
+        if reward < 0:
+            reward = 0
+
+        # Q-learning
+        if q_learning and not early_stop:
+            reward = 0
+            if done:
+                reward = 1
 
         return observation, reward, done, info
 
