@@ -57,11 +57,11 @@ class Q_Network(nn.Module):
         
         self.conv1 = nn.Conv2d(self.conv1_InChannelNum, self.conv1_OutChannelNum, self.conv1_KernelSize)
         self.bn1 = nn.BatchNorm2d(self.bn1_FeaturesNum)
-        self.nonlin1 = nn.ReLU(inplace = True)
+        self.nonlin1 = nn.ReLU()
         
         self.conv2 = nn.Conv2d(self.conv2_InChannelNum, self.conv2_OutChannelNum, self.conv2_KernelSize)
         self.bn2 = nn.BatchNorm2d(self.bn2_FeaturesNum)
-        self.nonlin2 = nn.ReLU(inplace = True)
+        self.nonlin2 = nn.ReLU()
         
         #self.flatten = torch.flatten()
         

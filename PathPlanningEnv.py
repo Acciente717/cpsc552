@@ -1,36 +1,35 @@
-import numpy as np
 import random
-import gym
-from gym import spaces
+import torch
 
 from AStar import AStar
 
-class PathPlanningEnv(gym.Env):
-    def __init__(self, discrete_space_size = 4):
-        super(PathPlanningEnv, self).__init__()
-        self.action_space = {'u':0, 'd':1, 'l':2, 'r':3}
+class PathPlanningEnv():
+    def __init__(self, *, height=None, width=None, obs_count=None, random_seed=None,
+                 grid=None, init_row=None, init_col=None, goal_row=None, goal_col=None):
+
+        # Initialize from an existing grid is supplied.
+        if grid is not None and init_row is not None and init_col is not None\
+        and goal_col is not None:
+            self._init_from_grid(grid, init_row, init_col, goal_row, goal_col)
+        # Initialize a random grid.
+        elif height is not None and width is not None and obs_count is not None:
+            random_seed = 42 if random_seed is None else random_seed
+            self._init_random_grid(height, width, obs_count, random_seed)
+        else:
+            raise RuntimeError('Error: insufficient arguments.')
         
-        self.grid_initial = np.empty(shape=(0, 0, 0))
-        self.init_row = None
-        self.init_col = None
-        self.goal = None
-        
-        self.grid = np.empty(shape=(0, 0, 0))
-        self.cur_row = None
-        self.cur_col = None
-    
-    def init_random_grid(self, height: int, width: int, obs_count: int, random_seed: int):
+        self._compute_all_distances()
+
+    def _init_random_grid(self, height: int, width: int, obs_count: int, random_seed: int):
         # check total number of grid points
         total_size = height*width
-
         assert total_size >= 2, 'Error: expect height * width >= 2'
-        
         
         # initialize the grid
         self.height = height
         self.width = width
-        self.grid_initial = np.empty(shape=(3, height, width))
-        self.grid_initial.fill(0)
+        self.grid_initial = torch.zeros(size=(3, height, width), requires_grad=False)
+
         # randomly select part of grid points as obstacles, and 1 point as source, 1 as target
         random.seed(random_seed)
         random_selections = random.sample(range(total_size), k=min(obs_count+2, total_size))
@@ -41,21 +40,20 @@ class PathPlanningEnv(gym.Env):
         
         target = random_selections.pop()
         self.grid_initial[1, target//width, target%width] = 1
-        self.goal = (target//width, target%width)
+        self.goal_row = target//width
+        self.goal_col = target%width
         
         for i in random_selections:
             row = i // width
             col = i % width
-            #print("{}: ({}, {})".format(i, row, col))
             self.grid_initial[2,row,col] = 1
-            
+
         self.reset()
 
-    def init_from_grid(self, obs_grid, p_init_row, p_init_col, goal_row, goal_col):
+    def _init_from_grid(self, obs_grid, p_init_row, p_init_col, goal_row, goal_col):
         self.height = obs_grid.shape[0]
         self.width = obs_grid.shape[1]
-        self.grid_initial = np.empty(shape=(3, self.height, self.width))
-        self.grid_initial.fill(0)
+        self.grid_initial = torch.zeros(size=(3, self.height, self.width), requires_grad=False)
         for i in range(self.height):
             for j in range(self.width):
                 self.grid_initial[2,i,j] = obs_grid[i,j]
@@ -63,8 +61,9 @@ class PathPlanningEnv(gym.Env):
         self.init_row, self.init_col = p_init_row, p_init_col
         self.grid_initial[0, self.init_row, self.init_col] = 1
 
-        self.goal = (goal_row, goal_col)
-        self.grid_initial[1, self.goal[0], self.goal[1]] = 1
+        self.goal_row = goal_row
+        self.goal_col = goal_col
+        self.grid_initial[1, self.goal_row, self.goal_col] = 1
 
         self.reset()
 
@@ -73,7 +72,7 @@ class PathPlanningEnv(gym.Env):
         assert self.grid_initial.shape[0] != 0, 'Error: expect an initial grid'
         assert self.init_row is not None and self.init_col is not None, 'Error: expect a initial position'
 
-        self.grid = np.copy(self.grid_initial)
+        self.grid = torch.Tensor(self.grid_initial)
         self.cur_row, self.cur_col = self.init_row, self.init_col
     
     def display(self, grid=None):
@@ -81,27 +80,27 @@ class PathPlanningEnv(gym.Env):
             grid = self.grid
         assert grid.shape[0] != 0, 'Error: expect a non-empty grid'
 
-        displ_board = np.zeros((self.height, self.width), dtype='<U2')
-        displ_board.fill(' ')
+        displ_board = [[' ' for _ in range(self.width)] for _ in range(self.height)]
         for i in range(self.height):
             for j in range(self.width):
                 if grid[0, i, j]==1:
-                    displ_board[i,j] = 'P'
+                    displ_board[i][j] = 'P'
                 elif grid[1, i, j]==1:
-                    displ_board[i,j] = 'T'
+                    displ_board[i][j] = 'T'
                 elif grid[2, i, j]==1:
-                    displ_board[i,j] = 'O'
-        print(displ_board)
+                    displ_board[i][j] = 'O'
+        for row in displ_board:
+            print(row)
     
-    def ComputeAllDistance(self, silent=True):
+    def _compute_all_distances(self, silent=True):
         assert self.grid_initial.shape[0] != 0, 'Error: expect a non-empty grid'
 
-        planner = AStar(self.grid_initial[2,:,:], self.goal, False)
+        planner = AStar(self.grid_initial[2,:,:], (self.goal_row, self.goal_col), False)
         if not silent: print(self.grid_initial[2,:,:])
-        self.distances = np.empty(shape=(self.height, self.width))
+        self.distances = torch.empty(size=(self.height, self.width))
         for i in range(self.height):
             for j in range(self.width):
-                if not silent: print("Evaluate distance from ({}, {}) to ({}, {})".format(i, j, self.goal[0], self.goal[1]))
+                if not silent: print("Evaluate distance from ({}, {}) to ({}, {})".format(i, j, self.goal_row, self.goal_col))
                 distance = 100
                 if (self.grid_initial[2, i, j] == 0):
                     path = planner.plan(i, j)
@@ -109,12 +108,11 @@ class PathPlanningEnv(gym.Env):
                 if not silent: print("  Distance {}".format(distance))
                 self.distances[i,j] = distance
 
-    
-    def step(self, action, early_stop=True, q_learning = False):
+    def step(self, action, early_stop=True, q_learning=False):
         done = False
-        old_distance = self.distances[self.cur_row, self.cur_col]
         new_row = self.cur_row
         new_col = self.cur_col
+
         if action=='u' or action==0:
             new_row -= 1
         elif action=='d' or action==1:
@@ -127,46 +125,40 @@ class PathPlanningEnv(gym.Env):
             raise RuntimeError("Error: unknown move")
 
         if not 0 <= new_row < self.height or not 0 <= new_col < self.width:
-            reward = -10
+            reward = 0 if q_learning else -10
             done = early_stop
         elif self.grid[2, new_row, new_col] == 1:
-            reward = -10
+            reward = 0 if q_learning else -10
             done = early_stop
         else:
-            new_distance = self.distances[new_row, new_col]
-            reward = old_distance - new_distance
-            
+            if q_learning:
+                reward = 0
+            else:
+                old_distance = self.distances[self.cur_row, self.cur_col]
+                new_distance = self.distances[new_row, new_col]
+                reward = old_distance - new_distance
+
             self.grid[0, self.cur_row, self.cur_col] = 0
             self.grid[0, new_row, new_col] = 1
 
             self.cur_row = new_row
             self.cur_col = new_col
 
-        if (new_row == self.goal[0] and new_col == self.goal[1]): # reach the target
+        if (new_row == self.goal_row and new_col == self.goal_col): # reach the target
+            reward = 1 if q_learning else reward
             done = True
-        
+
         observation = self.grid
         
         info = ""
-
-        if reward < 0:
-            reward = 0
-
-        # Q-learning
-        if q_learning and not early_stop:
-            reward = 0
-            if done:
-                reward = 1
 
         return observation, reward, done, info
 
 
 def main():
-    env = PathPlanningEnv()
-    env.init_random_grid(5, 10, 5, 100)
+    env = PathPlanningEnv(height=5, width=10, obs_count=5, random_seed=100)
     print(env.grid)
     env.display()
-    env.ComputeAllDistance()
     print(env.distances)
     for _ in range(10):
         _, reward, done, _ = env.step('r')
