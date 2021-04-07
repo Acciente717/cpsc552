@@ -125,5 +125,4 @@ venv.bak/
 dmypy.json
 
 # notebooks for debugging
-yihang_test.ipynb
 *.ipynb
