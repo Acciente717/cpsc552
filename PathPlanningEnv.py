@@ -1,5 +1,6 @@
 import random
 import torch
+import numpy as np
 
 from AStar import AStar
 
@@ -26,6 +27,7 @@ class PathPlanningEnv():
             torch.Tensor().new_tensor([0, 0, 1, 0], dtype=torch.float32, requires_grad=False),
             torch.Tensor().new_tensor([0, 0, 0, 1], dtype=torch.float32, requires_grad=False)
         ]
+        self.foot_prints = np.zeros((self.height, self.width), dtype=int)
 
     def _init_random_grid(self, height: int, width: int, obs_count: int, random_seed: int):
         # check total number of grid points
@@ -124,6 +126,8 @@ class PathPlanningEnv():
         new_row = self.cur_row
         new_col = self.cur_col
 
+        self.foot_prints[self.cur_row, self.cur_col] += 1
+
         if action == 'u' or action == 0:
             new_row -= 1
         elif action == 'd' or action == 1:
@@ -156,6 +160,7 @@ class PathPlanningEnv():
             self.cur_col = new_col
 
         if (new_row == self.goal_row and new_col == self.goal_col):  # reach the target
+            self.foot_prints[self.goal_row, self.goal_col] += 1
             reward = 1 if q_learning else reward
             done = True
 

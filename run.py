@@ -61,7 +61,7 @@ def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Confi
                 i, 100, sum(rewards[-100:])/100))
         while (counter <= max_play_length and not done):
             preds = []
-            state = env.grid.detach().clone()
+            state = env.grid
             for action in env.actions:
                 pred = model(state, action)
                 preds.append(pred)
