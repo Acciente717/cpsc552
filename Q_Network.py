@@ -1,9 +1,5 @@
 import torch
 import torch.nn as nn  # neural network modules
-import torch.nn.functional as F  # activation functions
-import torch.optim as optim  # optimizer
-from torch.autograd import Variable # add gradients to tensors
-from torch.nn import Parameter # model parameter functionality
 
 import torchvision
 
@@ -80,8 +76,8 @@ class Q_Network(nn.Module):
         h1 = self.nonlin1(self.bn1(self.conv1(x1)))
         h2 = self.nonlin2(self.bn2(self.conv2(h1)))
 
-        h3 = torch.flatten(h2)
-        h3 = torch.cat((h3, x2))
+        h3 = torch.flatten(h2, start_dim=1)
+        h3 = torch.cat((h3, x2), dim=1)
 
         h4 = self.nonlin3(self.linear_layer1(h3))
         h5 = self.nonlin4(self.linear_layer2(h4))

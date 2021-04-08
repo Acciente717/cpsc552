@@ -22,8 +22,8 @@ class FCNN(nn.Module):
         self.nonlin3 = nn.ReLU()
 
     def forward(self, maps, action):
-        maps = maps.flatten()
-        combined =  torch.cat([maps, action])
+        maps = maps.flatten(start_dim=1)
+        combined =  torch.cat([maps, action], dim=1)
         h1 = self.nonlin1(self.layer1(combined))
         h2 = self.nonlin2(self.layer2(h1))
         h3 = self.nonlin3(self.layer3(h2))

@@ -61,8 +61,10 @@ def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Confi
                 i, 100, sum(rewards[-100:])/100))
         while (counter <= max_play_length and not done):
             preds = []
-            state = env.grid
+            state = env.grid.clone().detach()
+            state = state.view(1, *state.shape)
             for action in env.actions:
+                action = action.view(1, *action.shape)
                 pred = model(state, action)
                 preds.append(pred)
 
@@ -82,7 +84,9 @@ def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Confi
             rewards.append(reward)
             counter += 1
 
-            loss = loss_func(preds[choice], torch.Tensor([reward]))
+            reward = torch.Tensor([reward])
+            reward = reward.view(1, *reward.shape)
+            loss = loss_func(preds[choice], reward)
             losses.append(loss.item())
 
             loss.backward()
@@ -125,8 +129,10 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
         while (counter <= max_play_length and not done):
             # find Q(s_{t},a) for all actions
             preds = []
-            state = env.grid
+            state = env.grid.clone().detach()
+            state = state.view(1, *state.shape)
             for action in env.actions:
+                action = action.view(1, *action.shape)
                 pred = model(state, action)
                 preds.append(pred)
 
@@ -151,7 +157,9 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
                 with torch.no_grad():
                     next_preds = []
                     state = env.grid
+                    state = state.view(1, *state.shape)
                     for action in env.actions:
+                        action = action.view(1, *action.shape)
                         next_pred = model(state, action)
                         next_preds.append(next_pred.item())
                     future_reward = max(next_preds)
@@ -162,7 +170,9 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
             counter += 1
 
             # Q(s,a|t) = r + gamma*max[Q(s,a|t+1)]
-            loss = loss_func(preds[choice], torch.Tensor([tot_reward]))
+            tot_reward = torch.Tensor([tot_reward])
+            tot_reward = tot_reward.view(1, *tot_reward.shape)
+            loss = loss_func(preds[choice], tot_reward)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -183,9 +193,11 @@ def PlayOnce(model: nn.Module, env: PathPlanningEnv, config: settings.Config):
     done = False
     while counter <= max_play_length and not done:
         preds = []
-        state = env.grid
+        state = env.grid.clone().detach()
+        state = state.view(1, *state.shape)
         print("state-action rewards: ", end=" ")
         for action in env.actions:
+            action = action.view(1, *action.shape)
             pred = model(state, action)
             preds.append(pred)
             print("{:.4f}".format(pred.item()), end=" ")
