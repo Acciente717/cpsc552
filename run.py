@@ -32,7 +32,7 @@ def init_seed(torch_seed=100, random_seed=100, np_random_seed=100):
     np.random.seed(np_random_seed)
 
 
-def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss()):
+def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss(), reset_model: bool = True):
     '''
     This function trains the model to memorize rewards for each (state, action) pair
     '''
@@ -45,8 +45,9 @@ def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Confi
     optimizer = optim.SGD(model.parameters(), lr=lr)
     loss_func = loss
 
-    init_seed()
-    model.apply(init_weights)
+    if reset_model:
+        init_seed()
+        model.apply(init_weights)
     model.train()
 
     rewards = []
@@ -96,7 +97,7 @@ def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Confi
     return rewards, losses
 
 
-def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss()):
+def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss(), reset_model: bool = True):
     '''
     This function trains the model using the Q-learning algorithm
     '''
@@ -110,8 +111,9 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
     optimizer = optim.SGD(model.parameters(), lr=lr)
     loss_func = loss
 
-    init_seed()
-    model.apply(init_weights)
+    if reset_model:
+        init_seed()
+        model.apply(init_weights)
     model.train()
 
     rewards = []

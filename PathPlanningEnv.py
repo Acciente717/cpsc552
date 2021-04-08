@@ -82,6 +82,7 @@ class PathPlanningEnv():
 
         self.grid = self.grid_initial.detach().clone()
         self.cur_row, self.cur_col = self.init_row, self.init_col
+        self.done = False
 
     def display(self, grid=None):
         if grid is None:
@@ -122,7 +123,7 @@ class PathPlanningEnv():
                 self.distances[i, j] = distance
 
     def step(self, action, early_stop=True, q_learning=False):
-        done = False
+        self.done = False
         new_row = self.cur_row
         new_col = self.cur_col
 
@@ -141,10 +142,10 @@ class PathPlanningEnv():
 
         if not 0 <= new_row < self.height or not 0 <= new_col < self.width:
             reward = 0 if q_learning else -1
-            done = early_stop
+            self.done = early_stop
         elif self.grid[2, new_row, new_col] == 1:
             reward = 0 if q_learning else -1
-            done = early_stop
+            self.done = early_stop
         else:
             if q_learning:
                 reward = 0
@@ -162,13 +163,13 @@ class PathPlanningEnv():
         if (new_row == self.goal_row and new_col == self.goal_col):  # reach the target
             self.foot_prints[self.goal_row, self.goal_col] += 1
             reward = 1 if q_learning else reward
-            done = True
+            self.done = True
 
         observation = self.grid
 
         info = ""
 
-        return observation, reward, done, info
+        return observation, reward, self.done, info
 
 
 def main():
