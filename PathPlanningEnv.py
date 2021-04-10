@@ -84,6 +84,16 @@ class PathPlanningEnv():
         self.cur_row, self.cur_col = self.init_row, self.init_col
         self.done = False
 
+    def random_reset(self):
+        assert self.grid_initial.shape[0] != 0, 'Error: expect an initial grid'
+        assert self.init_row is not None and self.init_col is not None, 'Error: expect a initial position'
+        
+        initials = [(0, 0), (0, self.width-1), (self.height-1, 0), (self.height-1, self.width-1)]
+
+        self.grid = self.grid_initial.detach().clone()
+        self.cur_row, self.cur_col = random.choice(initials)
+        self.done = False
+
     def display(self, grid=None):
         if grid is None:
             grid = self.grid
@@ -141,10 +151,10 @@ class PathPlanningEnv():
             raise RuntimeError("Error: unknown move")
 
         if not 0 <= new_row < self.height or not 0 <= new_col < self.width:
-            reward = 0 if q_learning else -1
+            reward = -0.5 if q_learning else -1
             self.done = early_stop
         elif self.grid[2, new_row, new_col] == 1:
-            reward = 0 if q_learning else -1
+            reward = -0.5 if q_learning else -1
             self.done = early_stop
         else:
             if q_learning:
