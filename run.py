@@ -97,7 +97,7 @@ def TrainMemorize(model: nn.Module, env: PathPlanningEnv, config: settings.Confi
     return rewards, losses
 
 
-def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss(), reset_model: bool = True):
+def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss(), trace_step: int = -1, reset_model: bool = True):
     '''
     This function trains the model using the Q-learning algorithm
     '''
@@ -118,11 +118,15 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
 
     rewards = []
     losses = []
+    traces = []
 
     for i in range(1, num_of_play+1):
         done = False
         counter = 0
-        env.random_reset()
+        if config.random_reset:
+            env.random_reset()
+        else:
+            env.reset()
         if i % 100 == 0:
             print("play round: {}, ave reward (last {}): {:.4f}".format(
                 i, 100, sum(rewards[-100:])/100))
@@ -151,7 +155,8 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
 
             # take the action, s_{t},a -> s_{t+1}
             # get the immediate reward
-            _, imm_reward, done, _ = env.step(choice, early_stop=False, q_learning=True)
+            _, imm_reward, done, _ = env.step(
+                choice, early_stop=False, q_learning=True)
 
             future_reward = 0
             # find Q(s_{t+1},a) for all actions
@@ -179,7 +184,11 @@ def TrainQlearning(model: nn.Module, env: PathPlanningEnv, config: settings.Conf
             optimizer.step()
             optimizer.zero_grad()
 
-    return rewards, losses
+        if (trace_step > 0) and (i % trace_step == 0):
+            traces.append(env.trace)
+
+    return rewards, losses, traces
+
 
 def TrainQlearningMultiple(model: nn.Module, envs: list, config: settings.Config, loss: torch.nn.modules.loss = nn.MSELoss(), reset_model: bool = True):
     '''
@@ -207,7 +216,10 @@ def TrainQlearningMultiple(model: nn.Module, envs: list, config: settings.Config
         done = False
         counter = 0
         env = random.choice(envs)
-        env.random_reset()
+        if config.random_reset:
+            env.random_reset()
+        else:
+            env.reset()
         if i % 100 == 0:
             print("play round: {}, ave reward (last {}): {:.4f}".format(
                 i, 100, sum(rewards[-100:])/100))
@@ -236,7 +248,8 @@ def TrainQlearningMultiple(model: nn.Module, envs: list, config: settings.Config
 
             # take the action, s_{t},a -> s_{t+1}
             # get the immediate reward
-            _, imm_reward, done, _ = env.step(choice, early_stop=False, q_learning=True)
+            _, imm_reward, done, _ = env.step(
+                choice, early_stop=False, q_learning=True)
 
             future_reward = 0
             # find Q(s_{t+1},a) for all actions
@@ -302,7 +315,10 @@ def TrainQlearningMultipleReverse(model: nn.Module, envs: list, config: settings
 
     for i in range(1, num_of_play+1):
         env = random.choice(envs)
-        env.random_reset()
+        if config.random_reset:
+            env.random_reset()
+        else:
+            env.reset()
         if i % 100 == 0:
             print("play round: {}, ave reward (last {}): {:.4f}".format(
                 i, 100, sum(rewards[-100:])/100))
@@ -332,19 +348,20 @@ def TrainQlearningMultipleReverse(model: nn.Module, envs: list, config: settings
                 max_positions = np.argwhere(
                     list_pred == max_pred).flatten().tolist()
                 choice = random.choice(max_positions)
-            _, imm_reward, done, _ = env.step(choice, early_stop=False, q_learning=True)
+            _, imm_reward, done, _ = env.step(
+                choice, early_stop=False, q_learning=True)
             moves.append(choice)
             imm_rewards.append(imm_reward)
-            
+
             counter += 1
-        
+
         rewards = imm_rewards.copy()
-        
+
         if done:
             counter = 0
             done = False
             model.train()
-            
+
             cur_row, cur_col = env.goal_row, env.goal_col
             cur_action, cur_reward = moves.pop(), imm_rewards.pop()
             rev_action = ReverseAction(cur_action)
@@ -376,7 +393,7 @@ def TrainQlearningMultipleReverse(model: nn.Module, envs: list, config: settings
                     next_pred = model(state, action)
                     next_preds.append(next_pred.item())
                 future_reward = max(next_preds)
-            
+
             while len(moves) > 0 and len(imm_rewards) > 0:
                 cur_row, cur_col = env.goal_row, env.goal_col
                 cur_action, cur_reward = moves.pop(), imm_rewards.pop()
@@ -396,12 +413,12 @@ def TrainQlearningMultipleReverse(model: nn.Module, envs: list, config: settings
                 real_reward = torch.Tensor([real_reward])
                 real_reward = real_reward.view(1, *real_reward.shape)
                 loss = loss_func(pred_reward, real_reward)
-                
+
                 losses.append(loss)
 
                 loss.backward()
                 optimizer.step()
-                
+
                 with torch.no_grad():
                     next_preds = []
                     state = env.grid.clone().detach()

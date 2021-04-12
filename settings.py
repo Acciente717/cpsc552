@@ -9,6 +9,7 @@ class Config:
                  epsilon_low = 0.1,
                  epsilon_step = 0.05,
                  epochs=1000,
+                 random_reset = True,
                  max_play_length=200,
                  gamma = 0.99
                  ):
@@ -21,5 +22,6 @@ class Config:
         self.epsilon_low = epsilon_low
         self.epsilon_step = epsilon_step
         self.epochs=epochs
+        self.random_reset = random_reset
         self.max_play_length=max_play_length
         self.gamma = gamma

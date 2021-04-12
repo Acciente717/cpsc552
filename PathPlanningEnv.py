@@ -83,6 +83,7 @@ class PathPlanningEnv():
         self.grid = self.grid_initial.detach().clone()
         self.cur_row, self.cur_col = self.init_row, self.init_col
         self.done = False
+        self.trace = [(self.cur_row, self.cur_row)]
 
     def random_reset(self):
         assert self.grid_initial.shape[0] != 0, 'Error: expect an initial grid'
@@ -93,6 +94,7 @@ class PathPlanningEnv():
         self.grid = self.grid_initial.detach().clone()
         self.cur_row, self.cur_col = random.choice(initials)
         self.done = False
+        self.trace = [(self.cur_row, self.cur_row)]
 
     def display(self, grid=None):
         if grid is None:
@@ -174,6 +176,8 @@ class PathPlanningEnv():
             self.foot_prints[self.goal_row, self.goal_col] += 1
             reward = 1 if q_learning else reward
             self.done = True
+
+        self.trace.append((self.cur_row, self.cur_col))
 
         observation = self.grid
 
