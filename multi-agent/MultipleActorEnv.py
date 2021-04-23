@@ -10,6 +10,13 @@ class Loc():
     def copy(self):
         return Loc(self.row, self.col)
 
+    def copy_from(self, loc):
+        self.row = loc.row
+        self.col = loc.col
+
+    def __eq__(self, other):
+        return (self.row == other.row) and (self.col == other.col)
+
 class MultiActorEnv():
     def __init__(self, *,
                  agent_count,
@@ -37,6 +44,10 @@ class MultiActorEnv():
             torch.Tensor().new_tensor([0, 0, 0, 1, 0], dtype=torch.float32, requires_grad=False),  # right
             torch.Tensor().new_tensor([0, 0, 0, 0, 1], dtype=torch.float32, requires_grad=False)   # stay still
         ]
+        self.target_reward = 1
+        self.out_bound_penalty = -0.5
+        self.obstacle_penalty = -0.5
+        self.collision_penalty = -0.5
 
     def _init_random_grid(self, agent_count: int, height: int, width: int, obs_count: int, random_seed: int):
         # check total number of grid points
@@ -71,7 +82,6 @@ class MultiActorEnv():
     def reset(self):
         self.grid = self.grid_initial.detach().clone()
         self.locs = self.srcs.copy()
-        self.done = False
 
     def display(self, grid=None):
         if grid is None:
@@ -90,10 +100,52 @@ class MultiActorEnv():
                     displ_board[i][j] = 'OO'
         for row in displ_board:
             print(row)
+    
+    def __out_of_boundary(self, loc: Loc):
+        '''
+        Returns True if the new location is out of the boundary
+        '''
+        if (loc.row >= self.height) or (loc.row < 0):
+            return True
+        if (loc.col >= self.width) or (loc.col < 0):
+            return True
+        return False
+    
+    def __is_obstacle(self, loc: Loc):
+        '''
+        Returns True if the new location is an obstacle
+        '''
+        return self.grid[2, loc.row, loc.col] == 1
+    
+    def __is_occupied(self, loc: Loc, agent_index: int):
+        '''
+        Returns True if the new location is occupied by a different agent
+            1. this new location is not empty, and
+            2. the agent in this new location is not the current agent
+        '''
+        return (self.grid[0, loc.row, loc.col] != 0) and (self.grid[0, loc.row, loc.col] != agent_index)
 
     def step(self, actions: list):
+        '''
+        Take a step based on given actions.
+        Returns
+            observations: a list of [3, height, weight] tensors
+                0th layer: current agent location
+                1st layer: current agent location
+                2nd layer: obstacles and other agents
+            rewards: a list of reward, an agent can move to a new location only when
+                1. new location is not out of bouondary, otherwise, return out_bound_penalty
+                2. new location is not a obstacle, otherwise, return obstacle_penalty
+                3. new location is currently not occupied by another agent, otherwise, return collision_penalty
+            dones: a list of boolean values indicate whether agents have reached their targers
+        Miscellaneous
+            if an agent has been on its target lcoation before taking the action, then this agent will be ignored
+        '''
         assert len(actions) == self.agent_count, "Error: #actions is incorrect"
         rewards = [0]*self.agent_count
+        dones = [False]*self.agent_count
+
+        # for each agent, find its new location based on its current location and the action
         new_locs = []
         for i in range(self.agent_count):
             action = actions[i]
@@ -114,16 +166,32 @@ class MultiActorEnv():
             new_locs.append(new_loc)
 
         for i in range(self.agent_count):
+            if self.__out_of_boundary(new_locs[i]): # if out of boundary, then do not move this agent, and give a penalty
+                new_locs[i].copy_from(self.locs[i])
+                rewards[i] = self.out_bound_penalty
+            elif self.__is_obstacle(new_locs[i]): # if this location is an obstacle, then do not move this agent, and give a penalty
+                new_locs[i].copy_from(self.locs[i])
+                rewards[i] = self.obstacle_penalty
+            elif self.__is_occupied(new_locs[i], i+1): # if this location is occupised, then do not move this agent, and give a penalty
+                new_locs[i].copy_from(self.locs[i])
+                rewards[i] = self.obstacle_penalty
+            else:
+                if (new_locs[i] == self.tgts[i]):
+                    rewards[i] = self.target_reward
+        
+        # clean old locations on the gird
+        for i in range(self.agent_count):
             self.grid[0, self.locs[i].row, self.locs[i].col] = 0
+        # add new locations to the grid
         for i in range(self.agent_count):
             self.grid[0, new_locs[i].row, new_locs[i].col] = i + 1 
-            self.locs[i] = new_locs[i]
+            self.locs[i].copy_from(new_locs[i])
 
-        observation = self.grid
+        observations = self.grid
 
         info = ""
 
-        return observation, rewards, self.done, info
+        return observations, rewards, dones, info
 
 
 def main():
