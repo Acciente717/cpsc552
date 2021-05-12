@@ -83,18 +83,29 @@ class PathPlanningEnv():
         self.grid = self.grid_initial.detach().clone()
         self.cur_row, self.cur_col = self.init_row, self.init_col
         self.done = False
-        self.trace = [(self.cur_row, self.cur_row)]
+        
+        self.trace = [(self.cur_row, self.cur_col)]
 
     def random_reset(self):
         assert self.grid_initial.shape[0] != 0, 'Error: expect an initial grid'
-        assert self.init_row is not None and self.init_col is not None, 'Error: expect a initial position'
         
         initials = [(0, 0), (0, self.width-1), (self.height-1, 0), (self.height-1, self.width-1)]
 
         self.grid = self.grid_initial.detach().clone()
         self.cur_row, self.cur_col = random.choice(initials)
         self.done = False
-        self.trace = [(self.cur_row, self.cur_row)]
+        
+        self.trace = [(self.cur_row, self.cur_col)]
+    
+    def reset_to(self, row, col):
+        assert self.grid_initial.shape[0] != 0, 'Error: expect an initial grid'
+        assert 0 <= row < self.height and 0 <= col < self.width, 'Error: position out of boundary'
+        
+        self.grid = self.grid_initial.detach().clone()
+        self.cur_row, self.cur_col = row, col
+        self.done = False
+        
+        self.trace = [(self.cur_row, self.cur_col)]
 
     def display(self, grid=None):
         if grid is None:
