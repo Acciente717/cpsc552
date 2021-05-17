@@ -7,29 +7,30 @@ from AStar import AStar
 
 class PathPlanningEnv():
     def __init__(self, *, height=None, width=None, obs_count=None, random_seed=None,
-                 grid=None, init_row=None, init_col=None, goal_row=None, goal_col=None):
+                 grid=None, init_row=None, init_col=None, goal_row=None, goal_col=None, device='cpu'):
 
         # Initialize from an existing grid is supplied.
         if grid is not None and init_row is not None and init_col is not None\
                 and goal_col is not None:
-            self._init_from_grid(grid, init_row, init_col, goal_row, goal_col)
+            self._init_from_grid(grid, init_row, init_col, goal_row, goal_col, device)
         # Initialize a random grid.
         elif height is not None and width is not None and obs_count is not None:
             random_seed = 42 if random_seed is None else random_seed
-            self._init_random_grid(height, width, obs_count, random_seed)
+            self._init_random_grid(height, width, obs_count, random_seed, device)
         else:
             raise RuntimeError('Error: insufficient arguments.')
 
         self._compute_all_distances()
         self.actions = [
-            torch.Tensor().new_tensor([1, 0, 0, 0], dtype=torch.float32, requires_grad=False), 
-            torch.Tensor().new_tensor([0, 1, 0, 0], dtype=torch.float32, requires_grad=False),
-            torch.Tensor().new_tensor([0, 0, 1, 0], dtype=torch.float32, requires_grad=False),
-            torch.Tensor().new_tensor([0, 0, 0, 1], dtype=torch.float32, requires_grad=False)
+            torch.Tensor().new_tensor([1, 0, 0, 0], dtype=torch.float32, requires_grad=False).to(device), 
+            torch.Tensor().new_tensor([0, 1, 0, 0], dtype=torch.float32, requires_grad=False).to(device),
+            torch.Tensor().new_tensor([0, 0, 1, 0], dtype=torch.float32, requires_grad=False).to(device),
+            torch.Tensor().new_tensor([0, 0, 0, 1], dtype=torch.float32, requires_grad=False).to(device)
         ]
         self.foot_prints = np.zeros((self.height, self.width), dtype=int)
+        self.device = device
 
-    def _init_random_grid(self, height: int, width: int, obs_count: int, random_seed: int):
+    def _init_random_grid(self, height: int, width: int, obs_count: int, random_seed: int, device: str):
         # check total number of grid points
         total_size = height*width
         assert total_size >= 2, 'Error: expect height * width >= 2'
@@ -57,9 +58,11 @@ class PathPlanningEnv():
             col = i % width
             self.grid_initial[2, row, col] = 1
 
+        self.grid_initial = self.grid_initial.to(device)
+
         self.reset()
 
-    def _init_from_grid(self, obs_grid, p_init_row, p_init_col, goal_row, goal_col):
+    def _init_from_grid(self, obs_grid, p_init_row, p_init_col, goal_row, goal_col, device):
         self.height = obs_grid.shape[0]
         self.width = obs_grid.shape[1]
         self.grid_initial = torch.zeros(size=(3, self.height, self.width), requires_grad=False)
@@ -73,6 +76,8 @@ class PathPlanningEnv():
         self.goal_row = goal_row
         self.goal_col = goal_col
         self.grid_initial[1, self.goal_row, self.goal_col] = 1
+        
+        self.grid_initial = self.grid_initial.to(device)
 
         self.reset()
 

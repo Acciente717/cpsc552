@@ -57,7 +57,7 @@ class ProgressiveTrainer:
     
     def __init__(self, model, height=10, width=10, num_obstacle=10, max_play_length=500,
                  epsilon_high=0.9, epsilon_low=0.1, gamma=0.9, lr=0.01,
-                 max_env_num=20, env_inc_acc=0.9, env_final_acc=0.98,
+                 init_env_num=1, max_env_num=20, env_inc_acc=0.9, env_final_acc=0.98, seed=42,
                  loss_func=nn.MSELoss(), device='cpu'):
         '''
         Parameters:
@@ -91,14 +91,20 @@ class ProgressiveTrainer:
         
         
         self.model.to(device)
+        self.device = device
         self.envs = []
+        self.init_env_num = init_env_num
         self.max_env_num = max_env_num
         self.env_inc_acc = env_inc_acc
         self.env_final_acc = env_final_acc
 
-        self.seed = 42
+        self.seed = seed
         
         self.train_state = {}
+        
+        while len(self.envs) < self.init_env_num:
+            self._add_new_env()
+            
     
     def _add_new_env(self):
         '''
@@ -112,7 +118,8 @@ class ProgressiveTrainer:
                 'height' : self.height,
                 'width' : self.width,
                 'obs_count' : self.num_obstacle,
-                'random_seed': self.seed
+                'random_seed': self.seed,
+                'device': self.device
             }
             self.seed += 1
             new_env = PathPlanningEnv(**model_settings)
@@ -137,26 +144,68 @@ class ProgressiveTrainer:
         '''
         
         # Vector map value: -2: obstacle, -1: goal, 0-3: directions
-        vec_map = torch.full((env.height, env.width), -2, dtype=torch.int8, requires_grad=False)
+        vec_map = torch.full((env.height, env.width), -2, dtype=torch.int8, requires_grad=False).to(self.device)
 
+#         for i in range(env.height):
+#             for j in range(env.width):
+#                 old_obs = env.grid[2,:,:]
+#                 env._init_from_grid(old_obs, i, j, env.goal_row, env.goal_col, self.device)
+#                 state = env.grid
+#                 if env.grid[2, i, j] == 0 and (i, j) != (env.goal_row, env.goal_col):
+#                     preds = []
+#                     state = env.grid.clone().detach()
+#                     state = state.view(1, *state.shape)
+#                     for action in env.actions:
+#                         action = action.view(1, *action.shape)
+#                         pred = self.model(state, action)
+#                         preds.append(pred.item())
+#                     preds = Softmax(preds)
+#                     max_index = preds.index(max(preds))
+#                     vec_map[i, j] = max_index
+        
+#         vec_map[env.goal_row, env.goal_col] = -1
+#         return vec_map
+
+#         for i in range(env.height):
+#             for j in range(env.width):
+#                 old_obs = env.grid[2,:,:]
+#                 env._init_from_grid(old_obs, i, j, env.goal_row, env.goal_col, self.device)
+#                 state = env.grid
+#                 if env.grid[2, i, j] == 0 and (i, j) != (env.goal_row, env.goal_col):
+#                     state = env.grid.clone().detach()
+#                     states = torch.stack((state, state, state, state))
+#                     actions = torch.stack(env.actions)
+#                     preds = self.model(states, actions)
+#                     preds = list(preds.flatten())
+#                     max_index = preds.index(max(preds))
+#                     vec_map[i, j] = max_index
+
+#         vec_map[env.goal_row, env.goal_col] = -1
+#         return vec_map
+    
         for i in range(env.height):
+            packed_states = []
+            packed_actions = []
             for j in range(env.width):
                 old_obs = env.grid[2,:,:]
-                env._init_from_grid(old_obs, i, j, env.goal_row, env.goal_col)
+                env._init_from_grid(old_obs, i, j, env.goal_row, env.goal_col, self.device)
                 state = env.grid
                 if env.grid[2, i, j] == 0 and (i, j) != (env.goal_row, env.goal_col):
-                    preds = []
                     state = env.grid.clone().detach()
-                    state = state.view(1, *state.shape)
-                    for action in env.actions:
-                        action = action.view(1, *action.shape)
-                        pred = self.model(state, action)
-                        preds.append(pred.item())
-                    preds = Softmax(preds)
+                    states = torch.stack((state, state, state, state))
+                    actions = torch.stack(env.actions)
+                    packed_states.append(states)
+                    packed_actions.append(actions)
+            packed_states = torch.cat(packed_states, dim=0)
+            packed_actions = torch.cat(packed_actions, dim=0)
+            packed_preds = self.model(packed_states, packed_actions)
+            idx = 0
+            for j in range(env.width):
+                if env.grid[2, i, j] == 0 and (i, j) != (env.goal_row, env.goal_col):
+                    preds = list(packed_preds[idx:idx+4].flatten())
                     max_index = preds.index(max(preds))
                     vec_map[i, j] = max_index
-        
-        vec_map[env.goal_row, env.goal_col] = -1
+                    idx += 4
         return vec_map
 
     def _is_out_of_boundary(self, env, loc):
@@ -333,11 +382,9 @@ class ProgressiveTrainer:
             else:
                 preds = []
                 state = env.grid.clone().detach()
-                state = state.view(1, *state.shape)
-                for action in env.actions:
-                    action = action.view(1, *action.shape)
-                    pred = self.model(state, action)
-                    preds.append(pred)
+                states = torch.stack((state, state, state, state))
+                actions = torch.stack(env.actions)
+                preds = self.model(states, actions)
                 list_pred = [x.item() for x in preds]
                 max_pred = np.amax(list_pred)
                 max_positions = np.argwhere(
@@ -373,7 +420,7 @@ class ProgressiveTrainer:
             self.optimizer.zero_grad()
             pred_reward = self.model(state, action_vec)
 
-            real_reward = torch.Tensor([cur_reward])
+            real_reward = torch.Tensor([cur_reward]).to(self.device)
             real_reward = real_reward.view(1, *real_reward.shape)
             loss = self.loss_func(pred_reward, real_reward)
 
@@ -417,7 +464,7 @@ class ProgressiveTrainer:
                 pred_reward = self.model(state, action_vec)
 
                 real_reward = cur_reward + self.gamma * future_reward
-                real_reward = torch.Tensor([real_reward])
+                real_reward = torch.Tensor([real_reward]).to(self.device)
                 real_reward = real_reward.view(1, *real_reward.shape)
                 loss = self.loss_func(pred_reward, real_reward)
 

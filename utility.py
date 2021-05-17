@@ -41,7 +41,7 @@ def VectorFieldPlot(network, env: PathPlanningEnv, width, height):
     for i in range(height):
         for j in range(width):
             old_obs = env.grid[2,:,:]
-            env._init_from_grid(old_obs, i, j, env.goal_row, env.goal_col)
+            env._init_from_grid(old_obs, i, j, env.goal_row, env.goal_col, env.device)
             state = env.grid
             if env.grid[2, i, j] == 0 and (i, j) != (env.goal_row, env.goal_col):
                 preds = []
