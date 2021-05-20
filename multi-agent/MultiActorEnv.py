@@ -3,6 +3,9 @@ import torch
 import numpy as np
 
 class Loc():
+    '''
+    A class for agent location
+    '''
     def __init__(self, row, col):
         self.row = row
         self.col = col
@@ -30,18 +33,21 @@ class MultiActorEnv():
                  srcs=None, tgts=None,
                  random_seed=None):
 
-        self.actor_number = actor_number
+        # map height, width, and number of obstacles
         self.height = height
         self.width = width
         self.obs_count = obs_count
 
+        # list of source-target pairs and associated information
+        self.actor_number = actor_number
         self.srcs = list()
         self.tgts = list()
-        self.srcs_init = list()
-        self.tgts_init = list()
         self.locs = list()
         self.idx = list()
+        self.srcs_init = list()
+        self.tgts_init = list()
 
+        # list of agents that have been in there target location
         self.tgt_dones = list()
         self.idx_dones = list()
 
@@ -49,8 +55,10 @@ class MultiActorEnv():
         if random_seed is None:
             random_seed = 100
         
+        # randomly initialize the map
         self._init_random_grid(self.actor_number, self.height, self.width, self.obs_count, random_seed)
 
+        # action space
         self.actions = [
             torch.Tensor().new_tensor([1, 0, 0, 0, 0], dtype=torch.float32, requires_grad=False),  # up
             torch.Tensor().new_tensor([0, 1, 0, 0, 0], dtype=torch.float32, requires_grad=False),  # down
@@ -58,6 +66,8 @@ class MultiActorEnv():
             torch.Tensor().new_tensor([0, 0, 0, 1, 0], dtype=torch.float32, requires_grad=False),  # right
             torch.Tensor().new_tensor([0, 0, 0, 0, 1], dtype=torch.float32, requires_grad=False)   # stay still
         ]
+
+        # reward and penalty
         self.target_reward = 1
         self.out_bound_penalty = -0.5
         self.obstacle_penalty = -0.5
@@ -65,6 +75,9 @@ class MultiActorEnv():
         self.stationary_penalty = -0.01
 
     def _init_random_grid(self, actor_number: int, height: int, width: int, obs_count: int, random_seed: int):
+        '''
+        Randomly initialize the map, including source-target pairs. obstacles
+        '''
         # check total number of grid points
         total_size = height*width
         assert total_size >= 2, 'Error: expect height * width >= 2'
@@ -76,6 +89,7 @@ class MultiActorEnv():
         random.seed(random_seed)
         random_selections = random.sample(range(total_size), k=min(obs_count+2*actor_number, total_size))
 
+        # randomly assign source and target locations for each object
         for i in range(actor_number):
             num = random_selections.pop()
             source = Loc(num//width, num % width)
@@ -87,6 +101,7 @@ class MultiActorEnv():
             self.tgts_init.append(target)
             self.grid_initial[1, target.row, target.col] = i + 1
 
+        # randomly assign locations for obstacles
         self.obs_list = [[],[],[]]
         for num in random_selections:
             row = num // width
@@ -98,6 +113,9 @@ class MultiActorEnv():
         self.reset()
 
     def reset(self):
+        '''
+        Reset the grid map to its initial state
+        '''
         self.srcs = [x.copy() for x in self.srcs_init]
         self.tgts = [x.copy() for x in self.tgts_init]
         self.actor_number = len(self.srcs_init)
@@ -108,6 +126,9 @@ class MultiActorEnv():
         self.idx_dones.clear()
 
     def display(self, grid=None):
+        '''
+        A simply funtion to show things on the map
+        '''
         if grid is None:
             grid = self.grid
         assert grid.shape[0] != 0, 'Error: expect a non-empty grid'
@@ -126,9 +147,15 @@ class MultiActorEnv():
             print(row)
 
     def get_obs(self):
+        '''
+        Returns the list of obstacles
+        '''
         return self.obs_list
 
     def get_tgts(self):
+        '''
+        Returns  the list of targets
+        '''
         tgts_list = [[],[],[]]
         for i in range(self.actor_number):
             tgts_list[0].append(self.tgts[i].col)
@@ -141,6 +168,9 @@ class MultiActorEnv():
         return tgts_list
 
     def get_locs(self):
+        '''
+        Returns the list of current locations of agents
+        '''
         locs_list = [[],[],[]]
         for i in range(self.actor_number):
             locs_list[0].append(self.locs[i].col)
@@ -199,6 +229,9 @@ class MultiActorEnv():
         return state.view(4*self.height*self.width)
 
     def remove_dones(self):
+        '''
+        Remove agents from the list if they are at their target location
+        '''
         hi_index = self.actor_number-1
         for i in range(hi_index, -1, -1):
             if (self.locs[i] == self.tgts[i]):
@@ -257,20 +290,30 @@ class MultiActorEnv():
             elif self.__is_obstacle(new_locs[i]): # if this location is an obstacle, then do not move this agent, and give a penalty
                 new_locs[i].set_from(self.locs[i])
                 rewards[i] = self.obstacle_penalty
-            elif (new_locs[i] == self.tgts[i]): # if reach target, then give a reward
-                rewards[i] = self.target_reward
             elif (new_locs[i] == self.locs[i]): # if this agent is stationary, then give a small penalty
                 rewards[i] = self.stationary_penalty
-            else:
-                is_collsion = False
-                for j in range(self.actor_number):
-                    if i==j: continue
-                    if (new_locs[i]==new_locs[j]):
-                        is_collsion = True
-                        break
-                if is_collsion: # if collide with another agent, then do not move this agent, and give a penalty
-                    new_locs[i].set_from(self.locs[i])
-                    rewards[i] = self.collision_penalty
+        
+        is_collsions = [False]*len(actions)
+        for i in range(self.actor_number): # check collision
+            for j in range(self.actor_number):
+                if i==j: continue
+                if (new_locs[i]==new_locs[j]) and (new_locs[i]!=self.locs[i]):
+                    # type1: move to a location, which is also a new location of a different agent
+                    is_collsions[i] = True
+                    break
+                elif (new_locs[i]==self.locs[j]) and (new_locs[j]!=self.locs[i]):
+                    # type2: location swap
+                    is_collsions[i] = True
+        
+        for i in range(self.actor_number): # if collision happens, do not move agents
+            if is_collsions[i]:
+                new_locs[i].set_from(self.locs[i])
+                rewards[i] = self.collision_penalty
+                
+
+        for i in range(self.actor_number):
+            if (new_locs[i] == self.tgts[i]): # if reach target, then give a reward
+                rewards[i] = self.target_reward
         
         # clean old locations on the gird
         for i in range(self.actor_number):
@@ -288,21 +331,32 @@ class MultiActorEnv():
 
 
 def main():
-    env = MultiActorEnv(actor_number=2, height=5, width=10, obs_count=5, random_seed=100)
+    '''
+    Simple test
+    '''
+    env = MultiActorEnv(actor_number=4, height=10, width=10, obs_count=5, random_seed=100)
     print(env.grid)
     env.display()
     print("-------------------------------------------------------------")
-    env.step(['l', 'l'])
+    rewards, dones = env.step(['r', 'l', 'r', 'l'])
     print(env.grid)
     env.display()
+    print(rewards)
     print("-------------------------------------------------------------")
-    env.step(['u', 'd'])
+    rewards, dones = env.step(['u', 'd', 'u', 'd'])
     print(env.grid)
     env.display()
+    print(rewards)
     print("-------------------------------------------------------------")
-    env.step(['u', 'd'])
+    rewards, dones = env.step(['u', 'd', 'u', 'd'])
     print(env.grid)
     env.display()
+    print(rewards)
+    print("-------------------------------------------------------------")
+    rewards, dones = env.step(['d', 'u', 'd', 'u'])
+    print(env.grid)
+    env.display()
+    print(rewards)
 
 if __name__ == "__main__":
     main()
